@@ -135,7 +135,7 @@ def dump_to_elastic(log_file):
         for post in post_list
     ]
     print("action")
-    print(account[:10])
+    print(action[:10])
     print("adding to es")
     helpers.bulk(es, action)
 
