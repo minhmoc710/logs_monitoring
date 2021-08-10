@@ -104,6 +104,7 @@ def get_posts_info(logs_data):
     return post_list
 
 def dump_to_elastic(log_file):
+    print("starting")
     logs_data = []
     with open("check_point.txt", 'r') as f:
         last_read_line = int(f.readline())
@@ -194,4 +195,5 @@ def get_monitoring_stat(post_list, number_of_day):
     pprint.pprint(account_error_info)
 
 if __name__ == "__main__":
-    dump_to_elastic("crrawl_public_group.log")
+    print("Do something please")
+    dump_to_elastic("crawl_public_group.log")
