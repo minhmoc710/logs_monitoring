@@ -114,13 +114,16 @@ def dump_to_elastic(log_file):
                 logs_data.append(line.strip())
     post_list = get_posts_info(logs_data)
     
+    print("log_data")
+    print(logs_data[:10])
     es = Elasticsearch([{'host':'localhost', 'port': 9200}])
     if not es.ping():
         print("Failed to initiate connection to Elasticsearch")
         return
-    
+    print("check if index exists")
     if not es.indices.exists(index = "crawl_monitor"):
-        es.indices.crate(index = "crawl_monitor")
+        print("Creatihg index crawl_monitor")
+        es.indices.create(index = "crawl_monitor")
         print("Created index crawl_monitor")
     
     action = [
@@ -130,7 +133,9 @@ def dump_to_elastic(log_file):
         }
         for post in post_list
     ]
-    
+    print("action")
+    print(account[:10])
+    print("adding to es")
     helpers.bulk(es, action)
 
 def get_monitoring_stat(post_list, number_of_day):
@@ -189,8 +194,4 @@ def get_monitoring_stat(post_list, number_of_day):
     pprint.pprint(account_error_info)
 
 if __name__ == "__main__":
-    with open(r"crawl_public_group.log", encoding='utf-8') as f:
-        logs_data = [line.strip() for line in f.readlines()] 
-    post_list = get_posts_info(logs_data)
-    with open ("wow.json", 'w') as f:
-        json.dump(post_list, f)
+    dump_to_elastic("crrawl_public_group.log")
