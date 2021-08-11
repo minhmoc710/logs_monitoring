@@ -143,7 +143,7 @@ def dump_to_elastic(log_file):
             if index > last_read_line:
                 logs_data.append(line.strip())
     with open("check_point.txt", 'w') as f:
-        f.write(index)
+        f.write(str(index))
 
     post_list = _get_posts_info(logs_data)
     
