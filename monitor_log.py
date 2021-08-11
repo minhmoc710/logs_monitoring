@@ -94,9 +94,11 @@ def _get_posts_info(logs_data):
     with open("checkpoint.json", "r") as f:
         checkpoint  = json.load(f)
 
+    print(checkpoint)
     group_id = checkpoint['last_post_data']["group_id"]
     account = checkpoint['last_post_data']['account']
-
+    print(f"group id {group_id}")
+    print(f"account {account}")
     total_posts = checkpoint['total_crawled']
     total_error = checkpoint['total_error']
     group_total = checkpoint['group_total']
