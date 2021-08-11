@@ -16,8 +16,8 @@ error = None
 def _follow(logfile, checkpoint_file):
     with open(checkpoint_file, 'r') as f:
         latest_line_pos = int(f.readline())
-    
-    logfile.seek(0,0)
+    f = open(logfile)
+    f.seek(0,0)
     current_line = 0
     try:
         while True:
@@ -32,6 +32,7 @@ def _follow(logfile, checkpoint_file):
                 current_line += 1
             yield line
     except KeyboardInterrupt:
+        f.close()
         with open(checkpoint_file, 'w') as f:
             f.write(str(current_line + 1))
 def _extract_account(text):
