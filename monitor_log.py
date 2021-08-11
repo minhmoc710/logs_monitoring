@@ -4,6 +4,7 @@ import pprint
 import json
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
+import time
 
 group_id = None
 curent_time = None
@@ -12,6 +13,27 @@ post_id = None
 error_log = None
 error = None
 
+def _follow(logfile, checkpoint_file):
+    with open(checkpoint_file, 'r') as f:
+        latest_line_pos = int(f.readline())
+    
+    logfile.seek(0,0)
+    current_line = 0
+    try:
+        while True:
+            line = logfile.readline()
+            if current_line < latest_line_pos:
+                current_line += 1
+                continue
+            if not line:
+                time.sleep(0.1)
+                continue
+            if line.strip() != "":
+                current_line += 1
+            yield line
+    except KeyboardInterrupt:
+        with open(checkpoint_file, 'w') as f:
+            f.write(str(current_line + 1))
 def _extract_account(text):
     usr_pattern = re.compile(r"(?<=User: ).+(?=,)")
     try:
@@ -49,7 +71,7 @@ def _reset_values():
 
 def _get_nday_log(number_of_day, post_list):
     if number_of_day == -1:
-        return post_list
+        return post_list, 'a','a'
         
     i = -1
     while post_list[i]['time'] == None:
@@ -134,17 +156,32 @@ def _get_posts_info(logs_data):
                 },f)
     return post_list
 
-def dump_to_elastic(log_file):
+def _get_log_from_file(log_file, checkpoint_file):
     logs_data = []
     with open("check_point.txt", 'r') as f:
-        last_read_line = int(f.readline())
+        try:
+            last_read_line = int(f.readline())
+        except:
+            print("Error reading last read line")
+
     with open(log_file, 'r', encoding='utf-8') as f:
         for index, line in enumerate(f):
             if index > last_read_line:
                 logs_data.append(line.strip())
-    with open("check_point.txt", 'w') as f:
+    with open(checkpoint_file, 'w') as f:
         f.write(str(index))
+    return logs_data
 
+# def _get_log_from_stream(log_file):
+#     logs_data = []
+#     with open("check_point.txt", 'r') as f:
+#         try:
+#             last_read_line = int(f.readline())
+#         except:
+#             print("Error reading last read line")
+
+def dump_to_elastic(log_file, checkpoint_file):
+    logs_data = _get_log_from_file(log_file, checkpoint_file)
     post_list = _get_posts_info(logs_data)
     
     print(logs_data[:10])
@@ -165,6 +202,30 @@ def dump_to_elastic(log_file):
     ]
     print("Inserting to es")
     helpers.bulk(es, action)
+
+def dump_from_stream(log_file, checkpoint_file):
+    logs_data = _follow(log_file, checkpoint_file)
+    print("Getting data from stream . . .")
+    for data in logs_data:
+        post_list = _get_posts_info([data])
+        
+        es = Elasticsearch([{'host':'localhost', 'port': 9200}])
+        if not es.ping():
+            print("Failed to initiate connection to Elasticsearch")
+            return
+        if not es.indices.exists(index = "crawl_monitor"):
+            es.indices.create(index = "crawl_monitor")
+            print("Created index crawl_monitor")
+        
+        action = [
+            {
+            "_index": "crawl_monitor",
+            "_source": post
+            }
+            for post in post_list
+        ]
+        print("Inserting to es")
+        helpers.bulk(es, action)
 
 def get_monitoring_stat(post_list, number_of_day):
     one_day_log, end_time, start_time = _get_nday_log(number_of_day, post_list)
@@ -222,10 +283,10 @@ def get_monitoring_stat(post_list, number_of_day):
     pprint.pprint(account_error_info)
 
 if __name__ == "__main__":
-    dump_to_elastic("crawl_public_group.log")
+    dump_to_elastic("crawl_public_group.log", "check_point.txt")
+    dump_from_stream("crawl_public_group.log", "check_point.txt")
     # with open ("crawl_public_group.log") as f:
     #     logs_data = [line.strip() for line in f.readlines()]
-
     # post_list = _get_posts_info(logs_data)
     # for x in post_list[:20]:
     #     print(x)
