@@ -61,7 +61,7 @@ def _extract_time(text):
         return None
 
 def _extract_post_id(text):
-    return text[36:]
+    return text[36:].strip()
 
 def _reset_values():
     group_id = None
@@ -94,11 +94,8 @@ def _get_posts_info(logs_data):
     with open("checkpoint.json", "r") as f:
         checkpoint  = json.load(f)
 
-    print(checkpoint)
     group_id = checkpoint['last_post_data']["group_id"]
     account = checkpoint['last_post_data']['account']
-    print(f"group id {group_id}")
-    print(f"account {account}")
     total_posts = checkpoint['total_crawled']
     total_error = checkpoint['total_error']
     group_total = checkpoint['group_total']
@@ -148,10 +145,10 @@ def _get_posts_info(logs_data):
                     "error_log": error_log,
                     "time":current_time,
                     "error": error,
-                    "group_total": group_total[group_id],
-                    "group_error_total": group_error_total[group_id],
-                    "total": total_posts,
-                    "total_error": total_error
+                    "group_total_crawled_posts": group_total[group_id],
+                    "group_total_errored_posts": group_error_total[group_id],
+                    "total_crawled_posts": total_posts,
+                    "total_errored_posts": total_error
                 })
     with open('checkpoint.json', 'w') as f:
         json.dump({
@@ -200,7 +197,23 @@ def dump_to_elastic(log_file, checkpoint_file):
         print("Failed to initiate connection to Elasticsearch")
         return
     if not es.indices.exists(index = "crawl_monitor"):
-        es.indices.create(index = "crawl_monitor")
+        mapping = {
+            "mappings": {
+                "properties": {
+                    "post_id": {"type":"text"},
+                    "account": {"type":"text"},
+                    "group_id": {"type":"text"},
+                    "error_log": {"type":"text"},
+                    "time":{ "type": "date", "format": ["yyyy/MM/dd HH:mm:ss"]},
+                    "error": {"type":"boolean"},
+                    "group_total_crawled_posts": {"type":"integer"},
+                    "group_total_errored_posts": {"type":"integer"},
+                    "total_crawled_posts": {"type":"integer"},
+                    "total_errored_posts": {"type":"integer"}
+                }
+            }
+        }
+        es.indices.create(index = "crawl_monitor", body=mapping, ignore=400)
         print("Created index crawl_monitor")
     
     action = [
