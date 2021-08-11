@@ -21,7 +21,7 @@ def _follow(logfile, checkpoint_file):
     current_line = 0
     try:
         while True:
-            line = logfile.readline()
+            line = f.readline()
             if current_line < latest_line_pos:
                 current_line += 1
                 continue
