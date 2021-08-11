@@ -1,1 +1,10 @@
-{"total_crawled": 4, "total_error": 5, "group_total": {"1189517794437569": 2, "527664264007410": 2}, "group_error_total": {"1189517794437569": 5, "527664264007410": 0}}
+{
+    "total_crawled": 0,
+    "total_error": 0,
+    "group_total": {},
+    "group_error_total": {},
+    "last_post_data": {
+        "group_id": "",
+        "account":""
+    }
+}
