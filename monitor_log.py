@@ -9,23 +9,24 @@ group_id = None
 curent_time = None
 account = None
 post_id = None
+error_log = None
 error = None
 
-def _extract_usr_pwd(text):
+def _extract_account(text):
     usr_pattern = re.compile(r"(?<=User: ).+(?=,)")
-    pwd_pattern = re.compile(r"(?<=Password: ).+")
     try:
         usr = re.findall(usr_pattern, text)[0]
-        pwd = re.findall(pwd_pattern, text)[0]
-        return {usr:pwd}
+        return usr
     except:
         return None
+
 def _extract_group_id(text):
     group_id_pattern = re.compile(r"(?<=group )\d+")
     try:
         return re.findall(group_id_pattern, text)[0]
     except:
         return None
+
 def _extract_time(text):
     time_pattern = re.compile(r"\[.+\]")
     try:
@@ -35,14 +36,17 @@ def _extract_time(text):
             return text[1:20]
     except:
         return None
+
 def _extract_post_id(text):
     return text[36:]
+
 def _reset_values():
     group_id = None
     curent_time = None
     account = None
     post_id = None
-    error = None
+    error_log = None
+
 def _get_nday_log(number_of_day, post_list):
     if number_of_day == -1:
         return post_list
@@ -62,68 +66,93 @@ def _get_nday_log(number_of_day, post_list):
         if day_diff > number_of_day:
             break
     return one_day_log, nearest_log_time, log_time
-def get_posts_info(logs_data):
+
+def _get_posts_info(logs_data):
+    with open("checkpoint.json", "r") as f:
+        checkpoint  = json.load(f)
+
+    total_posts = checkpoint['total_crawled']
+    total_error = checkpoint['total_error']
+    group_total = checkpoint['group_total']
+    group_error_total = checkpoint['group_error_total']
+
     post_list = []
+
     for line in logs_data:
+        contain_post_info = False
         if line == "=======":
             _reset_values()
         current_time = _extract_time(line)
         if "[INFO]:User" in line:
-            account = _extract_usr_pwd(line)
+            account = _extract_account(line)
         elif "Crawling group" in line:
             group_id = _extract_group_id(line)
-        elif "[INFO]:ID:" in line:
-            post_id = _extract_post_id(line)
-            post_list.append({
-                "post_id": post_id,
-                "account": account,
-                "group_id": group_id,
-                "error": "None",
-                "time":current_time
-            })
-        elif "[ERROR]:Error get id" in line:
-            post_id = "None"
-            error = "Error get id"
-            post_list.append({
-                "post_id": post_id,
-                "account": account,
-                "group_id": group_id,
-                "error": error,
-                "time":current_time
-            })
-        elif "Message: Unable to locate element: ._5rgr.async_like" in line:
-            post_id = "None"
-            error = "Unable to read posts"
-            post_list.append({
-                "post_id": post_id,
-                "account": account,
-                "group_id": group_id,
-                "error": error,
-                "time":current_time
-            })
+        else:
+            if "[INFO]:ID:" in line:
+                total_posts += 1
+                post_id = _extract_post_id(line)
+                error_log =  None,
+                error = False
+                if group_id in group_total:
+                    group_total[group_id] += 1
+                else:
+                    group_total[group_id] = 1
+                    group_error_total[group_id] = 0
+                contain_post_info = True
+                    
+            elif "[ERROR]" in line:
+                total_error += 1
+                post_id = None
+                error_log =  line,
+                error =  True
+
+                if group_id in group_error_total:
+                    group_error_total[group_id] += 1
+                else:
+                    group_total[group_id] = 0
+                    group_error_total[group_id] = 1
+                contain_post_info = True
+            if contain_post_info:
+                post_list.append({
+                    "post_id": post_id,
+                    "account": account,
+                    "group_id": group_id,
+                    "error_log": error_log,
+                    "time":current_time,
+                    "error": error,
+                    "group_total": group_total[group_id],
+                    "group_error_total": group_error_total[group_id],
+                    "total": total_posts,
+                    "total_error": total_error
+                })
+    with open('checkpoint.json', 'w') as f:
+        json.dump({
+                    "total_crawled": total_posts,
+                    "total_error": total_error,
+                    "group_total": group_total,
+                    "group_error_total": group_error_total
+                },f)
     return post_list
 
 def dump_to_elastic(log_file):
-    print("starting")
     logs_data = []
     with open("check_point.txt", 'r') as f:
         last_read_line = int(f.readline())
     with open(log_file, 'r', encoding='utf-8') as f:
         for index, line in enumerate(f):
             if index > last_read_line:
-                index = last_read_line
                 logs_data.append(line.strip())
-    post_list = get_posts_info(logs_data)
+    with open("check_point.txt", 'w') as f:
+        f.write(index)
+
+    post_list = _get_posts_info(logs_data)
     
-    print("log_data")
     print(logs_data[:10])
     es = Elasticsearch([{'host':'localhost', 'port': 9200}])
     if not es.ping():
         print("Failed to initiate connection to Elasticsearch")
         return
-    print("check if index exists")
     if not es.indices.exists(index = "crawl_monitor"):
-        print("Creatihg index crawl_monitor")
         es.indices.create(index = "crawl_monitor")
         print("Created index crawl_monitor")
     
@@ -134,9 +163,7 @@ def dump_to_elastic(log_file):
         }
         for post in post_list
     ]
-    print("action")
-    print(action[:10])
-    print("adding to es")
+    print("Inserting to es")
     helpers.bulk(es, action)
 
 def get_monitoring_stat(post_list, number_of_day):
@@ -195,5 +222,11 @@ def get_monitoring_stat(post_list, number_of_day):
     pprint.pprint(account_error_info)
 
 if __name__ == "__main__":
-    print("Do something please")
     dump_to_elastic("crawl_public_group.log")
+    # with open ("crawl_public_group.log") as f:
+    #     logs_data = [line.strip() for line in f.readlines()]
+
+    # post_list = _get_posts_info(logs_data)
+    # for x in post_list[:20]:
+    #     print(x)
+    # dump_to_elastic("crawl_public_group.log")
