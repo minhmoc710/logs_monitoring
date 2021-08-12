@@ -14,8 +14,15 @@ error_log = None
 error = None
 
 def _follow(logfile, checkpoint_file):
+    """
+    Reading logfile constantly and yield any new line written in the log file.
+    Parameters:
+        - logfile (string): path to file containning the log infomation
+        - checkpoint_file (string): path to file json containning last run time infomation
+    """
     with open(checkpoint_file, 'r') as f:
-        latest_line_pos = int(f.readline())
+        checkpoint_data = json.load(f)
+        latest_line_pos = checkpoint_data['last_read_line']
     f = open(logfile)
     f.seek(0,0)
     current_line = 0
@@ -34,8 +41,11 @@ def _follow(logfile, checkpoint_file):
     except KeyboardInterrupt:
         f.close()
         with open(checkpoint_file, 'w') as f:
-            f.write(str(current_line + 1))
+            checkpoint_data['last_read_line'] = curent_time + 1
+            json.dump(checkpoint_data, f)
+
 def _extract_account(text):
+    """Return account username from a text string"""
     usr_pattern = re.compile(r"(?<=User: ).+(?=,)")
     try:
         usr = re.findall(usr_pattern, text)[0]
@@ -44,6 +54,7 @@ def _extract_account(text):
         return None
 
 def _extract_group_id(text):
+    """Return group id from a text string"""
     group_id_pattern = re.compile(r"(?<=group )\d+")
     try:
         return re.findall(group_id_pattern, text)[0]
@@ -51,6 +62,7 @@ def _extract_group_id(text):
         return None
 
 def _extract_time(text):
+    """Return time from a text string"""
     time_pattern = re.compile(r"\[.+\]")
     try:
         contains_time = re.match(time_pattern, text)
@@ -61,9 +73,11 @@ def _extract_time(text):
         return None
 
 def _extract_post_id(text):
+    """Return post id from a text string"""
     return text[36:].strip()
 
 def _extract_found_posts(text):
+    """Return number of found posts from a text string"""
     found_posts_pattern = re.compile(r"(?<=\[INFO\]:Got )\d+")
     try:
         return int(re.findall(found_posts_pattern, text)[0])
@@ -97,8 +111,13 @@ def _get_nday_log(number_of_day, post_list):
             break
     return one_day_log, nearest_log_time, log_time
 
-def _get_posts_info(logs_data):
-    with open("checkpoint.json", "r") as f:
+def _get_posts_info(logs_data, checkpoint_file):
+    """
+    Return a list containning extracted data from log data
+    Parameters:
+        - logs_data (list): A list containing log lines
+    """
+    with open(checkpoint_file, "r") as f:
         checkpoint  = json.load(f)
 
     group_id = checkpoint['last_post_data']["group_id"]
@@ -138,7 +157,6 @@ def _get_posts_info(logs_data):
                     group_total[group_id] = 1
                     group_error_total[group_id] = 0
                 contain_post_info = True
-
             elif "[ERROR]" in line:
                 total_error += 1
                 post_id = None
@@ -167,6 +185,7 @@ def _get_posts_info(logs_data):
                 })
     with open('checkpoint.json', 'w') as f:
         json.dump({
+                    "last_read_line": checkpoint["last_read_line"],
                     "total_crawled": total_posts,
                     "total_error": total_error,
                     "group_total": group_total,
@@ -180,10 +199,12 @@ def _get_posts_info(logs_data):
     return post_list
 
 def _get_log_from_file(log_file, checkpoint_file):
+    """Return a list containning logs lines from log file"""
     logs_data = []
-    with open("check_point.txt", 'r') as f:
+    with open(checkpoint_file, 'r') as f:
         try:
-            last_read_line = int(f.readline())
+            checkpoint_data = json.load(f)
+            last_read_line = checkpoint_data["last_read_line"]
         except:
             print("Error reading last read line")
 
@@ -192,13 +213,14 @@ def _get_log_from_file(log_file, checkpoint_file):
             if index > last_read_line:
                 logs_data.append(line.strip())
     with open(checkpoint_file, 'w') as f:
-        f.write(str(index))
+        checkpoint_data["last_read_line"] = index
+        json.dump(checkpoint_data, f)
     return logs_data
 
-
 def dump_to_elastic(log_file, checkpoint_file):
+    """Dump extracted info to elasticsearch"""
     logs_data = _get_log_from_file(log_file, checkpoint_file)
-    post_list = _get_posts_info(logs_data)
+    post_list = _get_posts_info(logs_data, checkpoint_file)
     
     print(logs_data[:10])
     es = Elasticsearch([{'host':'localhost', 'port': 9200}])
@@ -206,23 +228,6 @@ def dump_to_elastic(log_file, checkpoint_file):
         print("Failed to initiate connection to Elasticsearch")
         return
     if not es.indices.exists(index = "crawl_monitor"):
-        mapping = {
-            "mappings": {
-                "properties": {
-                    "post_id": {"type":"text"},
-                    "account": {"type":"text"},
-                    "group_id": {"type":"text"},
-                    "error_log": {"type":"text"},
-                    "time":{ "type": "date", "format": ["yyyy-MM-dd HH:mm:ss"]},
-                    "error": {"type":"boolean"},
-                    "group_total_crawled_posts": {"type":"integer"},
-                    "group_total_errored_posts": {"type":"integer"},
-                    "total_crawled_posts": {"type":"integer"},
-                    "total_errored_posts": {"type":"integer"},
-                    "total_group_found_posts": {"type": "integer"}
-                }
-            }
-        }
         es.indices.create(index = "crawl_monitor", ignore=400)
         print("Created index crawl_monitor")
     
@@ -237,10 +242,11 @@ def dump_to_elastic(log_file, checkpoint_file):
     helpers.bulk(es, action)
 
 def dump_from_stream(log_file, checkpoint_file):
+    """Dump extracted data from stream to elasticsearch"""
     logs_data = _follow(log_file, checkpoint_file)
     print("Getting data from stream . . .")
     for data in logs_data:
-        post_list = _get_posts_info([data])
+        post_list = _get_posts_info([data], checkpoint_file)
         
         es = Elasticsearch([{'host':'localhost', 'port': 9200}])
         if not es.ping():
@@ -316,5 +322,5 @@ def get_monitoring_stat(post_list, number_of_day):
     pprint.pprint(account_error_info)
 
 if __name__ == "__main__":
-    dump_to_elastic("crawl_public_group.log", "check_point.txt")
-    dump_from_stream("crawl_public_group.log", "check_point.txt")
+    dump_to_elastic("crawl_public_group.log", "check_point.json")
+    dump_from_stream("crawl_public_group.log", "check_point.json")
