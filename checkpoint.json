@@ -2,6 +2,7 @@
     "total_crawled": 0,
     "total_error": 0,
     "group_total": {},
+    "group_found_posts": {},
     "group_error_total": {},
     "last_post_data": {
         "group_id": "",

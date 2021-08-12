@@ -63,6 +63,13 @@ def _extract_time(text):
 def _extract_post_id(text):
     return text[36:].strip()
 
+def _extract_found_posts(text):
+    found_posts_pattern = re.compile(r"(?<=\[INFO\]:Got )\d+")
+    try:
+        return int(re.findall(found_posts_pattern, text)[0])
+    except:
+        return None
+
 def _reset_values():
     group_id = None
     curent_time = None
@@ -100,6 +107,7 @@ def _get_posts_info(logs_data):
     total_error = checkpoint['total_error']
     group_total = checkpoint['group_total']
     group_error_total = checkpoint['group_error_total']
+    group_found_posts = checkpoint['group_found_posts']
 
     post_list = []
 
@@ -112,6 +120,11 @@ def _get_posts_info(logs_data):
             account = _extract_account(line)
         elif "Crawling group" in line:
             group_id = _extract_group_id(line)
+        elif "[INFO]:Got " in line:
+            if group_id in group_found_posts:   
+                group_found_posts[group_id] += 1
+            else:
+                group_found_posts[group_id] = 1
         else:
             if "[INFO]:ID:" in line:
                 total_posts += 1
@@ -124,7 +137,7 @@ def _get_posts_info(logs_data):
                     group_total[group_id] = 1
                     group_error_total[group_id] = 0
                 contain_post_info = True
-                    
+
             elif "[ERROR]" in line:
                 total_error += 1
                 post_id = None
@@ -148,7 +161,8 @@ def _get_posts_info(logs_data):
                     "group_total_crawled_posts": group_total[group_id],
                     "group_total_errored_posts": group_error_total[group_id],
                     "total_crawled_posts": total_posts,
-                    "total_errored_posts": total_error
+                    "total_errored_posts": total_error,
+                    "total_group_found_posts": group_found_posts[group_id]
                 })
     with open('checkpoint.json', 'w') as f:
         json.dump({
@@ -156,6 +170,7 @@ def _get_posts_info(logs_data):
                     "total_error": total_error,
                     "group_total": group_total,
                     "group_error_total": group_error_total,
+                    "group_found_posts": group_found_posts,
                     "last_post_data": {
                         "group_id": group_id,
                         "account":account
@@ -179,13 +194,6 @@ def _get_log_from_file(log_file, checkpoint_file):
         f.write(str(index))
     return logs_data
 
-# def _get_log_from_stream(log_file):
-#     logs_data = []
-#     with open("check_point.txt", 'r') as f:
-#         try:
-#             last_read_line = int(f.readline())
-#         except:
-#             print("Error reading last read line")
 
 def dump_to_elastic(log_file, checkpoint_file):
     logs_data = _get_log_from_file(log_file, checkpoint_file)
@@ -209,7 +217,8 @@ def dump_to_elastic(log_file, checkpoint_file):
                     "group_total_crawled_posts": {"type":"integer"},
                     "group_total_errored_posts": {"type":"integer"},
                     "total_crawled_posts": {"type":"integer"},
-                    "total_errored_posts": {"type":"integer"}
+                    "total_errored_posts": {"type":"integer"},
+                    "total_group_found_posts": {"type": "integer"}
                 }
             }
         }
@@ -308,9 +317,3 @@ def get_monitoring_stat(post_list, number_of_day):
 if __name__ == "__main__":
     dump_to_elastic("crawl_public_group.log", "check_point.txt")
     dump_from_stream("crawl_public_group.log", "check_point.txt")
-    # with open ("crawl_public_group.log") as f:
-    #     logs_data = [line.strip() for line in f.readlines()]
-    # post_list = _get_posts_info(logs_data)
-    # for x in post_list[:20]:
-    #     print(x)
-    # dump_to_elastic("crawl_public_group.log")
