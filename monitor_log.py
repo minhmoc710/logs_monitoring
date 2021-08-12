@@ -55,8 +55,8 @@ def _extract_time(text):
     try:
         contains_time = re.match(time_pattern, text)
         if contains_time:
-        #     return datetime.strptime(text[1:20], r'%Y-%m-%d %H:%M:%S')
-            return text[1:20]
+            return datetime.strptime(text[1:20], r'%Y-%m-%d %H:%M:%S')
+            # return text[1:20]
     except:
         return None
 
@@ -223,7 +223,7 @@ def dump_to_elastic(log_file, checkpoint_file):
                 }
             }
         }
-        es.indices.create(index = "crawl_monitor", body=mapping, ignore=400)
+        es.indices.create(index = "crawl_monitor", ignore=400)
         print("Created index crawl_monitor")
     
     action = [
