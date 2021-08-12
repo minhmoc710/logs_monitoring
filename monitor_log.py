@@ -212,7 +212,7 @@ def dump_to_elastic(log_file, checkpoint_file):
                     "account": {"type":"text"},
                     "group_id": {"type":"text"},
                     "error_log": {"type":"text"},
-                    "time":{ "type": "date", "format": ["yyyy/MM/dd HH:mm:ss"]},
+                    "time":{ "type": "date", "format": ["yyyy-MM-dd HH:mm:ss"]},
                     "error": {"type":"boolean"},
                     "group_total_crawled_posts": {"type":"integer"},
                     "group_total_errored_posts": {"type":"integer"},
