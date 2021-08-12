@@ -121,10 +121,11 @@ def _get_posts_info(logs_data):
         elif "Crawling group" in line:
             group_id = _extract_group_id(line)
         elif "[INFO]:Got " in line:
+            found_posts = _extract_found_posts(line)
             if group_id in group_found_posts:   
-                group_found_posts[group_id] += 1
+                group_found_posts[group_id] += found_posts
             else:
-                group_found_posts[group_id] = 1
+                group_found_posts[group_id] = found_posts
         else:
             if "[INFO]:ID:" in line:
                 total_posts += 1
